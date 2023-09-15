@@ -10,4 +10,4 @@ RUN apt-get update && apt-get install
 WORKDIR /usr/
 
 # Define un comando para ejecutar cuando se inicie un contenedor basado en esta imagen.
-CMD  ["bash run.sh"]
+CMD  ["bash /run.sh"]
