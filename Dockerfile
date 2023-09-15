@@ -8,6 +8,7 @@ RUN ansible-galaxy collection install kubernetes.core
 RUN apt-get update && apt-get install
 # Establece un directorio de trabajo en el contenedor.
 WORKDIR /usr/
+COPY run.sh /run.sh
 
 # Define un comando para ejecutar cuando se inicie un contenedor basado en esta imagen.
 CMD ["bash", "/run.sh"]
