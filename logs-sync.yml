@@ -1,0 +1,75 @@
+---
+- name: Backup Pod Logs
+  hosts: localhost
+  vars:
+    drive_path: /home/runner/Drive/
+  tasks:
+    - name: Get Current Date
+      shell: date +"%Y-%m-%d"
+      register: current_date
+
+    - name: Create Drive Directory
+      ansible.builtin.file:
+        path: "{{ drive_path }}{{ current_date.stdout }}"
+        state: directory
+
+    - name: Include labels variable
+      ansible.builtin.include_vars:
+        file: /app/config.yaml
+    
+    - name: Get Pod Name
+      kubernetes.core.k8s_info:
+        kind: Pod
+        namespace: "{{ namespace }}"
+        label_selectors: "{{ labels }}"
+      register: pod
+
+    - name: Get Log from a Pod in a specific container 
+      kubernetes.core.k8s_log:
+        name: "{{ pod.resources[0].metadata.name }}"
+        namespace: "{{ namespace }}"
+        container: "{{ container }}"
+      register: logs
+      when: container is defined 
+    
+    - name: Get Log from a Pod in all containers
+      kubernetes.core.k8s_log:
+        name: "{{ pod.resources[0].metadata.name }}"
+        namespace: "{{ namespace }}"
+        all_containers: true
+      register: logs
+      when: container is not defined
+
+    - name: Get Current Time
+      shell: date +"%H-%M-%S"
+      register: current_time
+
+    - name: Store Log in File
+      ansible.builtin.copy:
+        content: "{{ logs.log }}"
+        dest: "{{ drive_path }}{{ current_date.stdout }}/{{ pod.resources[0].metadata.name }}_{{ current_date.stdout }}_{{ current_time.stdout }}.log"
+
+    - name: Compress Log to Upload
+      community.general.archive:
+        path: "{{ drive_path }}{{ current_date.stdout }}/{{ pod.resources[0].metadata.name }}_{{ current_date.stdout }}_{{ current_time.stdout }}.log"
+        dest: "{{ drive_path }}{{ current_date.stdout }}/{{ pod.resources[0].metadata.name }}_{{ current_date.stdout }}_{{ current_time.stdout }}.log.gz"
+        format: gz
+        remove: true
+
+    - name: Upload Logs to Google Drive
+      ansible.builtin.shell: "rclone copy {{ drive_path }} --drive-shared-with-me {{ remote_drive }}" 
+      args:
+        executable: /bin/bash
+
+    - name: Sending e-mail using SMTP server
+      community.general.mail:
+        host: "{{ smtp_server }}"
+        port: "{{ smtp_port }}"
+        secure: never
+        from: "{{ sender }}"
+        to: "{{ recipients }}"
+        subject: Automation Report
+        body: El respaldo del log {{ pod.resources[0].metadata.name }}_{{ current_date.stdout }}_{{ current_time.stdout }}.log.gz relacionado al Pod {{ pod.resources[0].metadata.name }}, ha sido creado de manera exitosa.
+      delegate_to: localhost
+      when: send_mail is defined and send_mail is true
+
